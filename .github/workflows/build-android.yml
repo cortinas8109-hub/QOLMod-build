@@ -49,6 +49,23 @@ jobs:
           cp -a "$SOURCE_DIR/include" upstream/
           cp "$SOURCE_DIR/CMakeLists.txt" upstream/CMakeLists.txt
           cp "$SOURCE_DIR/mod.json" upstream/mod.json
+
+          # Some source ZIP revisions declare PlayLayerUtils::onModify but omit its definition.
+          PLAYLAYER_CPP="upstream/src/Hacks/Utils/PlayLayer.cpp"
+          test -f "$PLAYLAYER_CPP" || { echo "ERROR: expected $PLAYLAYER_CPP"; exit 1; }
+          if ! grep -Fq 'PlayLayerUtils::onModify' "$PLAYLAYER_CPP"; then
+            cat >> "$PLAYLAYER_CPP" <<'EOF'
+
+void PlayLayerUtils::onModify(auto& self)
+{
+    (void)self.setHookPriorityPost("PlayLayer::addObject", Priority::First);
+    (void)self.setHookPriorityPost("PlayLayer::postUpdate", Priority::First);
+}
+EOF
+            echo "Patched missing PlayLayerUtils::onModify definition"
+          else
+            echo "PlayLayerUtils::onModify definition already present"
+          fi
           echo "Prepared project files:"
           test -d upstream/resources
           test -d upstream/src
