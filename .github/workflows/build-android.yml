@@ -1,47 +1,78 @@
-name: Build QOLMod Android
+name: Build QOLMod Android64
 
 on:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   build-android:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout repository
+      - name: Checkout build repository
         uses: actions/checkout@v4
 
       - name: Extract QOLMod source
         id: locate
+        shell: bash
         run: |
-          set -e
+          set -euo pipefail
+          test -f QOLMod-source.zip || { echo "ERROR: QOLMod-source.zip is missing"; exit 1; }
+          mkdir -p extracted
           unzip -q QOLMod-source.zip -d extracted
-
-          MOD_JSON=$(find extracted -name mod.json -print -quit)
-
-          if [ -z "$MOD_JSON" ]; then
-            echo "ERROR: mod.json was not found"
-            exit 1
-          fi
-
-          PROJECT_DIR=$(dirname "$MOD_JSON")
-
-          if [ ! -f "$PROJECT_DIR/CMakeLists.txt" ]; then
-            echo "ERROR: CMakeLists.txt was not found"
-            exit 1
-          fi
-
+          MOD_JSON="$(find extracted -name mod.json -print -quit)"
+          test -n "$MOD_JSON" || { echo "ERROR: mod.json not found in ZIP"; exit 1; }
+          PROJECT_DIR="$(dirname "$MOD_JSON")"
+          for item in CMakeLists.txt src include; do
+            test -e "$PROJECT_DIR/$item" || { echo "ERROR: $item missing from source ZIP"; exit 1; }
+          done
           echo "path=$PROJECT_DIR" >> "$GITHUB_OUTPUT"
-          echo "Project found at: $PROJECT_DIR"
-          ls -la "$PROJECT_DIR"
+          echo "Source project: $PROJECT_DIR"
+          find "$PROJECT_DIR" -maxdepth 2 -type f | head -80
+
+      - name: Restore upstream QOLMod resources and project files
+        shell: bash
+        env:
+          SOURCE_DIR: ${{ steps.locate.outputs.path }}
+        run: |
+          set -euo pipefail
+          git clone --depth 1 --branch v2.8.6 https://github.com/TheSillyDoggo/GeodeMenu.git upstream
+          test -d upstream/resources || { echo "ERROR: upstream resources directory is missing"; exit 1; }
+          cp -a "$SOURCE_DIR/src" upstream/
+          cp -a "$SOURCE_DIR/include" upstream/
+          cp "$SOURCE_DIR/CMakeLists.txt" upstream/CMakeLists.txt
+          cp "$SOURCE_DIR/mod.json" upstream/mod.json
+          echo "Prepared project files:"
+          test -d upstream/resources
+          test -d upstream/src
+          test -d upstream/include
+          test -f upstream/CMakeLists.txt
+          test -f upstream/mod.json
+          echo "Resource file count: $(find upstream/resources -type f | wc -l)"
+          echo "Source file count: $(find upstream/src -type f | wc -l)"
 
       - name: Build Android64 Geode mod
         id: build
         uses: geode-sdk/build-geode-mod@main
         with:
-          path: ${{ steps.locate.outputs.path }}
+          path: upstream
           target: Android64
           sdk: given
+          build-config: Release
+
+      - name: Verify compiled package
+        shell: bash
+        env:
+          OUTPUT_DIR: ${{ steps.build.outputs.build-output }}
+        run: |
+          set -euo pipefail
+          echo "Build output: $OUTPUT_DIR"
+          find "$OUTPUT_DIR" -maxdepth 1 -type f -print
+          find "$OUTPUT_DIR" -maxdepth 1 -type f -name '*.geode' | grep -q . || {
+            echo "ERROR: build completed without producing a .geode package"
+            exit 1
+          }
 
       - name: Upload compiled mod
         uses: actions/upload-artifact@v4
@@ -49,4 +80,3 @@ jobs:
           name: QOLMod-Android64
           path: ${{ steps.build.outputs.build-output }}/*.geode
           if-no-files-found: error
-          
