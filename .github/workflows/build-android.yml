@@ -66,6 +66,7 @@ jobs:
           target: Android64
           sdk: given
           build-config: Release
+          use-lto: false
 
       - name: Verify compiled package
         shell: bash
