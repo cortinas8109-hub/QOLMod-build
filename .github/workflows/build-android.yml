@@ -50,21 +50,41 @@ jobs:
           cp "$SOURCE_DIR/CMakeLists.txt" upstream/CMakeLists.txt
           cp "$SOURCE_DIR/mod.json" upstream/mod.json
 
-          # Some source ZIP revisions declare PlayLayerUtils::onModify but omit its definition.
-          PLAYLAYER_CPP="upstream/src/Hacks/Utils/PlayLayer.cpp"
-          test -f "$PLAYLAYER_CPP" || { echo "ERROR: expected $PLAYLAYER_CPP"; exit 1; }
-          if ! grep -Fq 'PlayLayerUtils::onModify' "$PLAYLAYER_CPP"; then
-            cat >> "$PLAYLAYER_CPP" <<'EOF'
-          void PlayLayerUtils::onModify(auto& self)
-          {
-              (void)self.setHookPriorityPost("PlayLayer::addObject", Priority::First);
-              (void)self.setHookPriorityPost("PlayLayer::postUpdate", Priority::First);
-          }
-          EOF
-            echo "Patched missing PlayLayerUtils::onModify definition"
-          else
-            echo "PlayLayerUtils::onModify definition already present"
-          fi
+          # onModify uses an auto parameter, so its template definition must be visible in the header.
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          header = Path("upstream/src/Hacks/Utils/PlayLayer.hpp")
+          source = Path("upstream/src/Hacks/Utils/PlayLayer.cpp")
+          if not header.is_file() or not source.is_file():
+              raise SystemExit("ERROR: PlayLayer header/source not found")
+          h = header.read_text()
+          declaration = "    static void onModify(auto& self);"
+          definition = """    static void onModify(auto& self) {
+                (void)self.setHookPriorityPost("PlayLayer::addObject", Priority::First);
+                (void)self.setHookPriorityPost("PlayLayer::postUpdate", Priority::First);
+            }"""
+          if declaration in h:
+              h = h.replace(declaration, definition, 1)
+          elif "static void onModify(auto& self)" not in h or 'setHookPriorityPost("PlayLayer::addObject"' not in h:
+              raise SystemExit("ERROR: Could not safely patch onModify declaration in PlayLayer.hpp")
+          header.write_text(h)
+
+          cpp = source.read_text()
+          cpp, count = re.subn(
+              r"\nvoid PlayLayerUtils::onModify\(auto& self\)\s*\{.*?\n\}\s*",
+              "\n",
+              cpp,
+              count=1,
+              flags=re.S,
+          )
+          if count == 1:
+              source.write_text(cpp)
+          elif "PlayLayerUtils::onModify" in cpp:
+              raise SystemExit("ERROR: Found an unexpected onModify definition in PlayLayer.cpp")
+          print("Patched PlayLayerUtils::onModify inline in PlayLayer.hpp")
+          PY
           echo "Prepared project files:"
           test -d upstream/resources
           test -d upstream/src
