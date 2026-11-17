@@ -55,13 +55,12 @@ jobs:
           test -f "$PLAYLAYER_CPP" || { echo "ERROR: expected $PLAYLAYER_CPP"; exit 1; }
           if ! grep -Fq 'PlayLayerUtils::onModify' "$PLAYLAYER_CPP"; then
             cat >> "$PLAYLAYER_CPP" <<'EOF'
-
-void PlayLayerUtils::onModify(auto& self)
-{
-    (void)self.setHookPriorityPost("PlayLayer::addObject", Priority::First);
-    (void)self.setHookPriorityPost("PlayLayer::postUpdate", Priority::First);
-}
-EOF
+          void PlayLayerUtils::onModify(auto& self)
+          {
+              (void)self.setHookPriorityPost("PlayLayer::addObject", Priority::First);
+              (void)self.setHookPriorityPost("PlayLayer::postUpdate", Priority::First);
+          }
+          EOF
             echo "Patched missing PlayLayerUtils::onModify definition"
           else
             echo "PlayLayerUtils::onModify definition already present"
