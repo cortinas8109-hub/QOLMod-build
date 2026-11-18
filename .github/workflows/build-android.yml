@@ -347,6 +347,50 @@ jobs:
           echo "Resource file count: $(find upstream/resources -type f | wc -l)"
           echo "Source file count: $(find upstream/src -type f | wc -l)"
 
+          # Eclipse GUI pass: add a compact branded header to the actual Android mod menu.
+          # This edits AndroidUI.cpp in the build workspace, not just metadata or localisation.
+          python3 - <<'PY'
+          from pathlib import Path
+
+          ui = Path("upstream/src/GUI/AndroidUI.cpp")
+          text = ui.read_text()
+          marker = "    m_mainLayer->addChildAtPosition(catMenu, Anchor::Left, ccp(10 + 2.5f, 0));"
+          if marker not in text:
+              raise SystemExit("ERROR: Could not find AndroidUI category menu anchor for Eclipse header")
+          if "QOLMOD_ECLIPSE_GUI_HEADER" not in text:
+              header = """    // QOLMOD_ECLIPSE_GUI_HEADER: visible custom branding inside the actual menu.
+              auto eclipseTitle = CCLabelBMFont::create("ECLIPSE", "bigFont.fnt");
+              eclipseTitle->setScale(0.42f);
+              eclipseTitle->setColor(ccc3(80, 235, 255));
+              eclipseTitle->setAnchorPoint(ccp(0.5f, 0.5f));
+              eclipseTitle->setPosition(ccp(62, 246));
+              m_mainLayer->addChild(eclipseTitle, 5);
+
+              auto eclipseSubtitle = CCLabelBMFont::create("QOL MOD // ANDROID64", "bigFont.fnt");
+              eclipseSubtitle->setScale(0.19f);
+              eclipseSubtitle->setColor(ccc3(190, 210, 235));
+              eclipseSubtitle->setAnchorPoint(ccp(0.5f, 0.5f));
+              eclipseSubtitle->setPosition(ccp(62, 232));
+              m_mainLayer->addChild(eclipseSubtitle, 5);
+
+              auto eclipseAccent = CCLayerColor::create(ccc4(65, 225, 255, 230), 74.f, 2.f);
+              eclipseAccent->setAnchorPoint(ccp(0.5f, 0.5f));
+              eclipseAccent->setPosition(ccp(62, 222));
+              m_mainLayer->addChild(eclipseAccent, 5);
+
+              auto eclipseStatus = CCLabelBMFont::create("● LIVE", "bigFont.fnt");
+              eclipseStatus->setScale(0.20f);
+              eclipseStatus->setColor(ccc3(100, 255, 175));
+              eclipseStatus->setAnchorPoint(ccp(0.5f, 0.5f));
+              eclipseStatus->setPosition(ccp(62, 211));
+              m_mainLayer->addChild(eclipseStatus, 5);
+
+          """
+              text = text.replace(marker, header + marker, 1)
+              ui.write_text(text)
+          print("Applied visible Eclipse header, subtitle, cyan accent and status label to AndroidUI.cpp")
+          PY
+
       - name: Build Android64 Geode mod
         id: build
         uses: geode-sdk/build-geode-mod@main
