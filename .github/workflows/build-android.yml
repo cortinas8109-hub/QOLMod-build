@@ -347,48 +347,70 @@ jobs:
           echo "Resource file count: $(find upstream/resources -type f | wc -l)"
           echo "Source file count: $(find upstream/src -type f | wc -l)"
 
-          # Eclipse GUI pass: add a compact branded header to the actual Android mod menu.
-          # This edits AndroidUI.cpp in the build workspace, not just metadata or localisation.
+          # Eclipse redesign: restyle the existing QOLMod navigation and tab components.
+          # This modifies the real controls used by the menu rather than drawing a separate GUI on top.
           python3 - <<'PY'
           from pathlib import Path
+          import re
 
+          # Rework the existing category tab visuals: dark navy surfaces, cyan active state,
+          # calmer inactive labels, and a clearer selected outline.
+          tabs = Path("upstream/src/GUI/CategoryTabSprite.cpp")
+          text = tabs.read_text()
+          text = text.replace(
+              'background->setColor(ccc3(0, 0, 0));',
+              'background->setColor(ccc3(8, 18, 34));'
+          )
+          text = text.replace('background->setOpacity(100);', 'background->setOpacity(185);')
+          text = text.replace(
+              'outline->setScale(0.6f);',
+              'outline->setScale(0.6f);\n    outline->setColor(ccc3(65, 220, 255));\n    outline->setOpacity(245);'
+          )
+          text = text.replace(
+              'label->setColor(ccc3(255, 255, 255));',
+              'label->setColor(ccc3(85, 230, 255));'
+          )
+          text = text.replace(
+              'sprite->setColor(ccc3(255, 255, 255));',
+              'sprite->setColor(ccc3(85, 230, 255));'
+          )
+          if 'outline->setColor(ccc3(65, 220, 255));' not in text:
+              raise SystemExit("ERROR: Existing category outline styling was not changed")
+          tabs.write_text(text)
+
+          # Give the built-in sidebar more breathing room and slightly taller tap targets.
+          select = Path("upstream/src/GUI/CategorySelectMenu.cpp")
+          text = select.read_text()
+          text = text.replace('setContentSize(ccp(105, 20));', 'setContentSize(ccp(112, 22));')
+          text = text.replace('setContentSize(ccp(width, 20));', 'setContentSize(ccp(width, 22));')
+          text = text.replace('setContentSize(ccp(width - (shouldScrollbarShow() ? scrollbar->getContentWidth() + inset : 0), 20));',
+                              'setContentSize(ccp(width - (shouldScrollbarShow() ? scrollbar->getContentWidth() + inset : 0), 22));')
+          text = text.replace('->setGap(2.5f)', '->setGap(3.0f)')
+          select.write_text(text)
+
+          # Update the actual sidebar and content layout; preserve the original responsive popup size.
           ui = Path("upstream/src/GUI/AndroidUI.cpp")
           text = ui.read_text()
-          marker = "    m_mainLayer->addChildAtPosition(catMenu, Anchor::Left, ccp(10 + 2.5f, 0));"
+          text = text.replace('catMenu->setContentSize(ccp(105, 255));', 'catMenu->setContentSize(ccp(112, 255));')
+          text = text.replace('bg->setContentSize(ccp(110, m_size.height - 10 * 2));',
+                              'bg->setContentSize(ccp(117, m_size.height - 10 * 2));')
+          # Keep the original QOLMod structure and category/module widgets; only refine their existing layout.
+          if 'catMenu->setContentSize(ccp(112, 255));' not in text:
+              raise SystemExit("ERROR: Native category sidebar layout patch did not apply")
+          ui.write_text(text)
+
+          # Apply a subtle cyan tint to the existing panel outline, not a separate overlay.
+          bgfile = Path("upstream/src/GUI/BackgroundSprite.cpp")
+          text = bgfile.read_text()
+          marker = 'outlineSpr->setVisible(theme == BackgroundType::Darken);'
+          tint = marker + '\n    outlineSpr->setColor(ccc3(65, 220, 255));'
           if marker not in text:
-              raise SystemExit("ERROR: Could not find AndroidUI category menu anchor for Eclipse header")
-          if "QOLMOD_ECLIPSE_GUI_HEADER" not in text:
-              header = """    // QOLMOD_ECLIPSE_GUI_HEADER: visible custom branding inside the actual menu.
-              auto eclipseTitle = CCLabelBMFont::create("ECLIPSE", "bigFont.fnt");
-              eclipseTitle->setScale(0.42f);
-              eclipseTitle->setColor(ccc3(80, 235, 255));
-              eclipseTitle->setAnchorPoint(ccp(0.5f, 0.5f));
-              eclipseTitle->setPosition(ccp(62, 246));
-              m_mainLayer->addChild(eclipseTitle, 5);
+              raise SystemExit("ERROR: Existing QOLMod background outline hook not found")
+          if 'outlineSpr->setColor(ccc3(65, 220, 255));' not in text:
+              text = text.replace(marker, tint, 1)
+          bgfile.write_text(text)
 
-              auto eclipseSubtitle = CCLabelBMFont::create("QOL MOD // ANDROID64", "bigFont.fnt");
-              eclipseSubtitle->setScale(0.19f);
-              eclipseSubtitle->setColor(ccc3(190, 210, 235));
-              eclipseSubtitle->setAnchorPoint(ccp(0.5f, 0.5f));
-              eclipseSubtitle->setPosition(ccp(62, 232));
-              m_mainLayer->addChild(eclipseSubtitle, 5);
-
-              auto eclipseAccent = CCLayerColor::create(ccc4(65, 225, 255, 230), 74.f, 2.f);
-              eclipseAccent->setAnchorPoint(ccp(0.5f, 0.5f));
-              eclipseAccent->setPosition(ccp(62, 222));
-              m_mainLayer->addChild(eclipseAccent, 5);
-
-              auto eclipseStatus = CCLabelBMFont::create("● LIVE", "bigFont.fnt");
-              eclipseStatus->setScale(0.20f);
-              eclipseStatus->setColor(ccc3(100, 255, 175));
-              eclipseStatus->setAnchorPoint(ccp(0.5f, 0.5f));
-              eclipseStatus->setPosition(ccp(62, 211));
-              m_mainLayer->addChild(eclipseStatus, 5);
-
-          """
-              text = text.replace(marker, header + marker, 1)
-              ui.write_text(text)
-          print("Applied visible Eclipse header, subtitle, cyan accent and status label to AndroidUI.cpp")
+          print("Applied Eclipse redesign to native QOLMod tab sprites, tap targets, sidebar layout, and panel outline")
           PY
 
       - name: Build Android64 Geode mod
