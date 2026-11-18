@@ -91,29 +91,24 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
 
+          import re
           noclip = Path("upstream/src/Hacks/Level/Noclip/Noclip.hpp")
           text = noclip.read_text()
-          old = """            setSafeModeCustom([this]
-            {
-                if (auto pl = PlayLayer::get())
-                {
-                    if (reinterpret_cast<NoclipBaseGameLayer*>(pl)->m_fields->hasDiedThisAttempt)
-                        return true;
-                }
-
-                return false;
-            });"""
-          new = """            setSafeModeCustom([this]
-            {
-                // Any attempt with noclip enabled must be treated as cheated,
-                // even if the player happens not to collide with an obstacle.
-                return this->getRealEnabled();
-            });"""
-          if old in text:
-              text = text.replace(old, new, 1)
-          elif "return this->getRealEnabled();" not in text:
-              raise SystemExit("ERROR: Could not safely patch Noclip Safe Mode trigger")
-          noclip.write_text(text)
+          replacement = """setSafeModeCustom([this]
+          {
+              // Any attempt with noclip enabled must be treated as cheated.
+              return this->getRealEnabled();
+          });"""
+          updated, count = re.subn(
+              r"setSafeModeCustom\(\[this\]\s*\{.*?\}\s*\);",
+              replacement,
+              text,
+              count=1,
+              flags=re.S,
+          )
+          if count != 1:
+              raise SystemExit("ERROR: Could not locate Noclip Safe Mode callback")
+          noclip.write_text(updated)
 
           # Enable the local icon/color unlock module by default.
           # This is a local bypass, not a permanent server-side account unlock.
