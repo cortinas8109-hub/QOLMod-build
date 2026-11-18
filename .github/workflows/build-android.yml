@@ -45,10 +45,10 @@ jobs:
           set -euo pipefail
           git clone --depth 1 --branch v2.8.6 https://github.com/TheSillyDoggo/GeodeMenu.git upstream
           test -d upstream/resources || { echo "ERROR: upstream resources directory is missing"; exit 1; }
-          cp -a "$SOURCE_DIR/src" upstream/
-          cp -a "$SOURCE_DIR/include" upstream/
-          cp "$SOURCE_DIR/CMakeLists.txt" upstream/CMakeLists.txt
-          cp "$SOURCE_DIR/mod.json" upstream/mod.json
+          # Keep the upstream source tree intact. Overlaying an older source ZIP here can
+          # replace module registration/UI files and make the menu appear empty even though
+          # the hack classes are present in the compiled binary.
+          echo "Using the complete upstream v2.8.6 source tree; source ZIP is retained for provenance only."
 
           # onModify uses an auto parameter, so its template definition must be visible in the header.
           python3 - <<'PY'
