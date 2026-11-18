@@ -159,14 +159,14 @@ jobs:
               if include not in text:
                   text = include + "\n" + text
           init = """    // Force registration before building the category lists.
-    (void)Noclip::get();
-    (void)ShowHitboxes::get();
-    (void)HitboxTrail::get();
-    (void)CheckpointFix::get();
-    qolmod_force_register_startpos_switcher();
-    qolmod_force_register_unlock_all_icons();
+              (void)Noclip::get();
+              (void)ShowHitboxes::get();
+              (void)HitboxTrail::get();
+              (void)CheckpointFix::get();
+              qolmod_force_register_startpos_switcher();
+              qolmod_force_register_unlock_all_icons();
 
-"""
+          """
           marker = "void AndroidUI::populateModules()"
           if marker not in text:
               raise SystemExit("ERROR: AndroidUI::populateModules marker not found")
