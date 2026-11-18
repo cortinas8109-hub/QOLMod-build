@@ -113,7 +113,9 @@ jobs:
               put("names/" + module_id, name)
               put("descriptions/" + module_id, desc)
 
-          for category in categories | {"Level", "Universal", "Creator", "Cosmetic", "Speedhack", "Icon Effects", "Labels", "Shortcuts", "Config", "Search", "Favourites", "All Modules"}:
+          category_labels = {category.split("/", 1)[0] for category in categories}
+          category_labels |= {"Level", "Universal", "Creator", "Cosmetic", "Speedhack", "Icon Effects", "Labels", "Shortcuts", "Config", "Search", "Favourites", "All Modules"}
+          for category in category_labels:
               put("categories/" + category.lower(), category)
 
           language = {
