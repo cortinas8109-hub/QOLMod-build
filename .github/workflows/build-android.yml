@@ -125,6 +125,51 @@ jobs:
               raise SystemExit("ERROR: Could not safely enable Unlock All Icons by default")
           icons.write_text(text)
 
+          # Expose explicit registration helpers for modules whose source-local classes
+          # cannot be referenced directly from AndroidUI.cpp.
+          startpos = Path("upstream/src/Hacks/Level/StartposSwitcher.cpp")
+          text = startpos.read_text()
+          marker = "SUBMIT_HACK(StartposSwitcher);"
+          helper = "void qolmod_force_register_startpos_switcher() { StartposSwitcher::get(); }\n\n"
+          if marker not in text:
+              raise SystemExit("ERROR: StartposSwitcher registration marker not found")
+          if "qolmod_force_register_startpos_switcher" not in text:
+              text = text.replace(marker, helper + marker, 1)
+              startpos.write_text(text)
+
+          icons = Path("upstream/src/Hacks/Universal/UnlockAllIcons.cpp")
+          text = icons.read_text()
+          marker = "SUBMIT_HACK(UnlockAllIcons);"
+          helper = "void qolmod_force_register_unlock_all_icons() { UnlockAllIcons::get(); }\n\n"
+          if marker not in text:
+              raise SystemExit("ERROR: UnlockAllIcons registration marker not found")
+          if "qolmod_force_register_unlock_all_icons" not in text:
+              text = text.replace(marker, helper + marker, 1)
+              icons.write_text(text)
+
+          # Initialize key modules before AndroidUI enumerates Module::moduleMap.
+          ui = Path("upstream/src/GUI/AndroidUI.cpp")
+          text = ui.read_text()
+          includes = [
+              '#include "../Hacks/Level/Noclip/Noclip.hpp"',
+              '#include "../Hacks/Level/Hitboxes/ShowHitboxes.hpp"',
+              '#include "../Hacks/Level/CheckpointFix/CheckpointFix.hpp"',
+          ]
+          for include in includes:
+              if include not in text:
+                  text = include + "\\n" + text
+          init = """    // Force registration before building the category lists.\\n    (void)Noclip::get();\\n    (void)ShowHitboxes::get();\\n    (void)HitboxTrail::get();\\n    (void)CheckpointFix::get();\\n    qolmod_force_register_startpos_switcher();\\n    qolmod_force_register_unlock_all_icons();\\n\\n"""
+          marker = "void AndroidUI::populateModules()\\n{\\n"
+          if marker not in text:
+              raise SystemExit("ERROR: AndroidUI::populateModules marker not found")
+          if "qolmod_force_register_startpos_switcher();" not in text:
+              text = text.replace(marker, marker + init, 1)
+          declarations = "void qolmod_force_register_startpos_switcher();\\nvoid qolmod_force_register_unlock_all_icons();\\n\\n"
+          if "void qolmod_force_register_startpos_switcher();" not in text:
+              text = declarations + text
+          ui.write_text(text)
+          print("Added explicit UI-time registration for Noclip, Hitboxes, Checkpoint Fix, Startpos Switcher, and Unlock All Icons")
+
           required = [
               "src/Hacks/Level/Noclip/Noclip.hpp",
               "src/Hacks/Level/Hitboxes/Modules.cpp",
