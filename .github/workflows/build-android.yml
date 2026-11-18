@@ -51,6 +51,74 @@ jobs:
           cp -a "$SOURCE_DIR/include" upstream/
           cp "$SOURCE_DIR/CMakeLists.txt" upstream/CMakeLists.txt
           cp "$SOURCE_DIR/mod.json" upstream/mod.json
+
+          # The supplied ZIP intentionally contains source only. Rebuild a minimal English
+          # localisation file from module metadata so names/categories remain readable even
+          # when the upstream resource checkout has no translation JSON files.
+          python3 - <<'PY'
+          from pathlib import Path
+          import json, re
+
+          root = Path("upstream")
+          resources = root / "resources"
+          resources.mkdir(parents=True, exist_ok=True)
+          mod_path = root / "mod.json"
+          mod = json.loads(mod_path.read_text())
+          files = mod.setdefault("resources", {}).setdefault("files", [])
+          if "resources/*.json" not in files:
+              files.append("resources/*.json")
+          mod_path.write_text(json.dumps(mod, indent=2) + "\n")
+
+          strings = {}
+          def put(path, value):
+              parts = path.split("/")
+              node = strings
+              for part in parts[:-1]:
+                  node = node.setdefault(part, {})
+              node[parts[-1]] = value
+
+          def humanize(value):
+              value = value.rsplit("/", 1)[-1]
+              value = re.sub(r"[-_]+", " ", value).strip()
+              return " ".join(word[:1].upper() + word[1:] for word in value.split()) or "Module"
+
+          categories = set()
+          source_root = root / "src"
+          for path in source_root.rglob("*"):
+              if not path.is_file() or path.suffix not in {".cpp", ".hpp", ".h"}:
+                  continue
+              source = path.read_text(errors="replace")
+              for match in re.finditer(r'setCategory\("([^"]+)"\)', source):
+                  categories.add(match.group(1))
+              ids = list(re.finditer(r'setID\("([^"]+)"\)', source))
+              for i, match in enumerate(ids):
+                  module_id = match.group(1)
+                  end = ids[i + 1].start() if i + 1 < len(ids) else min(len(source), match.end() + 1200)
+                  chunk = source[match.start():max(match.end(), end)]
+                  name_match = re.search(r'setName\("([^"]+)"\)', chunk)
+                  desc_match = re.search(r'setDescription\("([^"]+)"\)', chunk)
+                  name = name_match.group(1) if name_match else humanize(module_id)
+                  desc = desc_match.group(1) if desc_match else f"{name} module."
+                  put("names/" + module_id, name)
+                  put("descriptions/" + module_id, desc)
+
+          for category in categories | {"Level", "Universal", "Creator", "Cosmetic", "Speedhack", "Icon Effects", "Labels", "Shortcuts", "Config", "Search", "Favourites", "All Modules"}:
+              put("categories/" + category.lower(), category)
+
+          language = {
+              "display_name_english": "English",
+              "display_name_native": "English",
+              "font": "notosans.fnt",
+              "alt-font-usage": "Auto",
+              "strings": strings
+          }
+          output = resources / "en-AU.json"
+          output.write_text(json.dumps(language, ensure_ascii=False, indent=2) + "\n")
+          names = strings.get("names", {})
+          if len(names) < 20:
+              raise SystemExit(f"ERROR: generated only {len(names)} module labels; refusing to build")
+          print(f"Generated English fallback: {len(names)} module labels; {len(categories)} detected categories")
+          PY
           echo "Overlaid supplied QOLMod source and project files; retained upstream resources."
 
           # onModify uses an auto parameter, so its template definition must be visible in the header.
