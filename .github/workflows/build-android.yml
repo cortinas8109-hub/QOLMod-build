@@ -85,6 +85,63 @@ jobs:
               raise SystemExit("ERROR: Found an unexpected onModify definition in PlayLayer.cpp")
           print("Patched PlayLayerUtils::onModify inline in PlayLayer.hpp")
           PY
+
+          # Ensure noclip runs are always marked cheated, even if the player never visibly dies.
+          # Auto Safe Mode then blocks saving level progress/rewards for that attempt.
+          python3 - <<'PY'
+          from pathlib import Path
+
+          noclip = Path("upstream/src/Hacks/Level/Noclip/Noclip.hpp")
+          text = noclip.read_text()
+          old = """            setSafeModeCustom([this]
+            {
+                if (auto pl = PlayLayer::get())
+                {
+                    if (reinterpret_cast<NoclipBaseGameLayer*>(pl)->m_fields->hasDiedThisAttempt)
+                        return true;
+                }
+
+                return false;
+            });"""
+          new = """            setSafeModeCustom([this]
+            {
+                // Any attempt with noclip enabled must be treated as cheated,
+                // even if the player happens not to collide with an obstacle.
+                return this->getRealEnabled();
+            });"""
+          if old in text:
+              text = text.replace(old, new, 1)
+          elif "return this->getRealEnabled();" not in text:
+              raise SystemExit("ERROR: Could not safely patch Noclip Safe Mode trigger")
+          noclip.write_text(text)
+
+          # Enable the local icon/color unlock module by default.
+          # This is a local bypass, not a permanent server-side account unlock.
+          icons = Path("upstream/src/Hacks/Universal/UnlockAllIcons.cpp")
+          text = icons.read_text()
+          old = '            setDescription("Unlocks all the icons");'
+          new = old + '\n            setDefaultEnabled(true);'
+          if old in text and 'setDefaultEnabled(true);' not in text:
+              text = text.replace(old, new, 1)
+          elif old not in text:
+              raise SystemExit("ERROR: Could not safely enable Unlock All Icons by default")
+          icons.write_text(text)
+
+          required = [
+              "src/Hacks/Level/Noclip/Noclip.hpp",
+              "src/Hacks/Level/Hitboxes/Modules.cpp",
+              "src/Hacks/Speedhack/Speedhack.cpp",
+              "src/SafeMode/Hooks.cpp",
+              "src/Hacks/Universal/UnlockAllIcons.cpp",
+              "src/Hacks/Level/CheckpointFix/CheckpointFix.hpp",
+              "src/Hacks/Level/StartposSwitcher.cpp",
+          ]
+          missing = [p for p in required if not Path("upstream", p).is_file()]
+          if missing:
+              raise SystemExit("ERROR: Required QOLMod features are missing: " + ", ".join(missing))
+          print("Verified required features: noclip, hitboxes, speedhack, safe mode, icon unlock, checkpoint fix, startpos switcher")
+          PY
+
           echo "Prepared project files:"
           test -d upstream/resources
           test -d upstream/src
