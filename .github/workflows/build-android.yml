@@ -229,6 +229,34 @@ jobs:
           print("Verified required features: noclip, hitboxes, speedhack, safe mode, icon unlock, checkpoint fix, startpos switcher")
           PY
 
+          # Add a guaranteed fallback tab containing every registered root module, independent of category labels.
+          python3 - <<'PY'
+          from pathlib import Path
+
+          ui = Path("upstream/src/GUI/AndroidUI.cpp")
+          text = ui.read_text()
+          marker = "    m_mainLayer->addChild(categoryMenu);"
+          fallback = """    // QOLMOD_ALL_MODULES_FALLBACK
+              auto allModules = CategoryNode::getNode("All Modules");
+              allModules->setID("All Modules");
+              categories.emplace("All Modules", allModules);
+              categoryMenu->addChildAtPosition(allModules, Anchor::Right, ccp(-10, 0));
+              for (auto module : Module::moduleMap)
+              {
+                  if (!module || module->getParent())
+                      continue;
+                  allModules->addModule(module);
+              }
+
+          """
+          if "QOLMOD_ALL_MODULES_FALLBACK" not in text:
+              if text.count(marker) != 1:
+                  raise SystemExit("ERROR: Could not uniquely locate AndroidUI category menu insertion point")
+              text = text.replace(marker, fallback + marker, 1)
+              ui.write_text(text)
+          print("Added All Modules fallback tab for every registered root module")
+          PY
+
           echo "Prepared project files:"
           test -d upstream/resources
           test -d upstream/src
