@@ -177,7 +177,42 @@ jobs:
           if "void qolmod_force_register_startpos_switcher();" not in text:
               text = declarations + text
           ui.write_text(text)
-          print("Added explicit UI-time registration for Noclip, Hitboxes, Checkpoint Fix, Startpos Switcher, and Unlock All Icons")
+
+          # Make module categories visible even when they are absent from the hard-coded tab order.
+          # populateModules() creates category nodes from registered modules; populateTabs() previously
+          # only added tabs listed in categoryOrders, leaving other module categories unreachable.
+          text = ui.read_text()
+          extension_marker = "    for (qolmod::ext::CategoryData& cat : ExtensionManager::get()->getCategories())"
+          dynamic_tabs = """    // Add tabs for registered module categories missing from the hard-coded order.
+              for (auto const& entry : categories)
+              {
+                  bool alreadyOrdered = false;
+                  for (auto const& ordered : categoryOrders)
+                  {
+                      if (ordered == entry.first)
+                      {
+                          alreadyOrdered = true;
+                          break;
+                      }
+                  }
+                  if (alreadyOrdered)
+                      continue;
+
+                  catMenu->addCategory(
+                      entry.first,
+                      fmt::format("{}{}.png", ""_spr, "universal"),
+                      entry.first,
+                      CategoryType::Standard
+                  );
+              }
+
+          """
+          if extension_marker not in text:
+              raise SystemExit("ERROR: Could not find populateTabs extension category insertion point")
+          if "Add tabs for registered module categories missing from the hard-coded order" not in text:
+              text = text.replace(extension_marker, dynamic_tabs + extension_marker, 1)
+              ui.write_text(text)
+          print("Added explicit UI-time registration and dynamic tabs for all registered module categories")
 
           required = [
               "src/Hacks/Level/Noclip/Noclip.hpp",
