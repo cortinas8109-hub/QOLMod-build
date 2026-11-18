@@ -83,6 +83,7 @@ jobs:
               return " ".join(word[:1].upper() + word[1:] for word in value.split()) or "Module"
 
           categories = set()
+          records = {}
           source_root = root / "src"
           for path in source_root.rglob("*"):
               if not path.is_file() or path.suffix not in {".cpp", ".hpp", ".h"}:
@@ -99,8 +100,18 @@ jobs:
                   desc_match = re.search(r'setDescription\("([^"]+)"\)', chunk)
                   name = name_match.group(1) if name_match else humanize(module_id)
                   desc = desc_match.group(1) if desc_match else f"{name} module."
-                  put("names/" + module_id, name)
-                  put("descriptions/" + module_id, desc)
+                  records[module_id] = (name, desc)
+
+          # The language format nests IDs by slash. A parent module ID can also be a
+          # prefix of its option IDs, so omit that parent key rather than corrupting
+          # the JSON tree; its fallback label is still handled by the UI.
+          ids_with_children = {module_id for module_id in records
+                               if any(other.startswith(module_id + "/") for other in records)}
+          for module_id, (name, desc) in records.items():
+              if module_id in ids_with_children:
+                  continue
+              put("names/" + module_id, name)
+              put("descriptions/" + module_id, desc)
 
           for category in categories | {"Level", "Universal", "Creator", "Cosmetic", "Speedhack", "Icon Effects", "Labels", "Shortcuts", "Config", "Search", "Favourites", "All Modules"}:
               put("categories/" + category.lower(), category)
